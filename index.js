@@ -157,54 +157,57 @@ async function generarYEnviar(chatId, prompt, nombreProyecto) {
   try {
     const files = await generarArchivos(prompt);
 
-    const projectName = `web-${Date.now()}`;
-    const projectPath = `./${projectName}`;
-
-    await fs.mkdir(projectPath);
-    await fs.writeFile(`${projectPath}/index.html`, files.html);
-    await fs.writeFile(`${projectPath}/style.css`, files.css);
-    await fs.writeFile(`${projectPath}/script.js`, files.js);
-
-    let deployedURL = null;
-
-    await new Promise((resolve) => {
-      exec(`cd ${projectName} && vercel --prod --yes`, (error, stdout) => {
-        if (!error) {
-          const match = stdout.match(/https:\/\/[^\s]+/);
-          if (match) deployedURL = match[0];
-        }
-        resolve();
-      });
-    });
-
-    const zipPath = `${projectName}.zip`;
-    await crearZip(projectPath, zipPath);
-
-    if (deployedURL) {
-      bot.sendMessage(chatId, `🚀 Web publicada:\n${deployedURL}`);
-    } else {
-      bot.sendMessage(chatId, "⚠️ No se pudo crear subdominio automático.");
+    if (!files?.html) {
+      throw new Error("La IA no generó HTML válido");
     }
 
-    await bot.sendDocument(chatId, zipPath);
+    // 🔥 COMBINAR TODO EN UN SOLO HTML
+    let htmlFinal = files.html;
 
-    // Guardar en DB
+    // Insertar CSS dentro del <head>
+    if (files.css) {
+      htmlFinal = htmlFinal.replace(
+        "</head>",
+        `<style>\n${files.css}\n</style>\n</head>`
+      );
+    }
+
+    // Insertar JS antes de </body>
+    if (files.js) {
+      htmlFinal = htmlFinal.replace(
+        "</body>",
+        `<script>\n${files.js}\n</script>\n</body>`
+      );
+    }
+
+    // 🔥 ENVIAR A RENDER
+    const response = await axios.post(
+      "https://TU_RENDER_URL.onrender.com/api/crear",
+      {
+        usuario: chatId.toString(),
+        html: htmlFinal
+      }
+    );
+
+    const deployedURL = response.data.url;
+
+    // Guardar en DB local del bot
     const db = cargarDB();
     if (!db[chatId]) db[chatId] = [];
+
     db[chatId].push({
       nombre: nombreProyecto,
       url: deployedURL,
       fecha: new Date().toISOString()
     });
+
     guardarDB(db);
 
-    setTimeout(async () => {
-      await fs.remove(projectPath);
-      await fs.remove(zipPath);
-    }, 15000);
+    // Responder al usuario
+    bot.sendMessage(chatId, `🚀 Web creada exitosamente:\n${deployedURL}`);
 
   } catch (err) {
-    console.error("ERROR:", err.response?.data || err.message);
+    console.error("ERROR REAL:", err.response?.data || err.message);
     bot.sendMessage(chatId, "❌ Error generando la web.");
   }
 }

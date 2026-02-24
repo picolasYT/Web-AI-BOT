@@ -171,23 +171,24 @@ async function generarYEnviar(chatId, prompt, nombre) {
   bot.sendMessage(chatId, "⚙️ Generando diseño profesional...");
 
   const promptFinal = `
-Eres diseñador web senior 2026.
+Eres diseñador web senior 2026 experto en UX/UI.
 
-Reglas:
+Reglas obligatorias:
 - Diseño moderno minimalista
-- Responsive
-- Google Fonts
+- Responsive mobile-first
+- Google Fonts (Inter o Poppins)
 - Hero impactante
-- Botones con hover
+- Botones con hover moderno
 - Animaciones suaves
-- Sombras y degradados
-- Footer elegante
-- Código limpio
+- Sombras suaves y degradados elegantes
+- Footer profesional
+- Código limpio y optimizado
+- No usar frameworks externos
 
-Detalles:
+Detalles del usuario:
 ${prompt}
 
-Devuelve SOLO JSON:
+Devuelve SOLO JSON válido:
 {
   "html": "...",
   "css": "...",
@@ -195,22 +196,32 @@ Devuelve SOLO JSON:
 }
 `;
 
+  let projectName;
+  let projectPath;
+  let zipPath;
+
   try {
+    // ===== GENERAR ARCHIVOS IA =====
     const files = await generarArchivos(promptFinal);
 
-    const projectName = `web-${Date.now()}`;
-    const projectPath = `./${projectName}`;
+    if (!files?.html || !files?.css || !files?.js) {
+      throw new Error("Archivos inválidos generados por IA");
+    }
+
+    projectName = `web-${Date.now()}`;
+    projectPath = `./${projectName}`;
 
     await fs.mkdir(projectPath);
     await fs.writeFile(`${projectPath}/index.html`, files.html);
     await fs.writeFile(`${projectPath}/style.css`, files.css);
     await fs.writeFile(`${projectPath}/script.js`, files.js);
 
+    // ===== DEPLOY VERCEL =====
     let deployedURL = null;
 
     await new Promise((resolve) => {
       exec(`cd ${projectName} && vercel --prod --yes`, (err, stdout) => {
-        if (!err) {
+        if (!err && stdout) {
           const match = stdout.match(/https:\/\/[^\s]+/);
           if (match) deployedURL = match[0];
         }
@@ -218,43 +229,70 @@ Devuelve SOLO JSON:
       });
     });
 
-    const zipPath = `${projectName}.zip`;
+    // ===== CREAR ZIP =====
+    zipPath = `${projectName}.zip`;
     await crearZip(projectPath, zipPath);
 
+    // ===== GUARDAR EN DB =====
     const db = loadDB();
+
+    // 🔥 FIX DEFINITIVO
+    if (!db[chatId]) {
+      db[chatId] = {
+        premium: false,
+        proyectos: []
+      };
+    }
+
+    if (!db[chatId].proyectos) {
+      db[chatId].proyectos = [];
+    }
+
     db[chatId].proyectos.push({
       nombre,
-      url: deployedURL,
+      url: deployedURL || null,
       fecha: new Date().toISOString()
     });
+
     saveDB(db);
 
-    if (deployedURL)
-      bot.sendMessage(chatId, `🚀 Web publicada:\n${deployedURL}`);
+    // ===== RESPUESTA AL USUARIO =====
+    if (deployedURL) {
+      await bot.sendMessage(chatId, `🚀 Web publicada:\n${deployedURL}`);
+    } else {
+      await bot.sendMessage(chatId, "⚠️ No se pudo publicar en Vercel, pero te envío el ZIP.");
+    }
 
     await bot.sendDocument(chatId, zipPath);
 
+    // ===== BOTONES EDITOR =====
     const opciones = {
       reply_markup: {
         inline_keyboard: [
           [
             { text: "🎨 Cambiar color", callback_data: "editar_color" },
             { text: "✏️ Cambiar título", callback_data: "editar_titulo" }
+          ],
+          [
+            { text: "❌ Cancelar", callback_data: "cancelar" }
           ]
         ]
       }
     };
 
-    bot.sendMessage(chatId, "¿Querés modificar algo?", opciones);
-
-    setTimeout(async () => {
-      await fs.remove(projectPath);
-      await fs.remove(zipPath);
-    }, 15000);
+    await bot.sendMessage(chatId, "¿Querés modificar algo?", opciones);
 
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    bot.sendMessage(chatId, "❌ Error generando la web.");
+    console.error("🔥 ERROR REAL:", err.response?.data || err.message);
+    await bot.sendMessage(chatId, "❌ Error generando la web.");
+  }
+
+  // ===== LIMPIEZA SEGURA =====
+  try {
+    if (projectPath) await fs.remove(projectPath);
+    if (zipPath) await fs.remove(zipPath);
+  } catch (cleanupError) {
+    console.log("⚠️ Error limpiando archivos:", cleanupError.message);
   }
 }
 

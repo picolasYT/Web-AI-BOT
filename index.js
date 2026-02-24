@@ -260,24 +260,37 @@ Devuelve SOLO JSON:
 
 // ================= OPENROUTER =================
 
+// ================= OPENROUTER =================
+
 async function generarArchivos(prompt) {
   const response = await axios.post(
     "https://openrouter.ai/api/v1/chat/completions",
     {
-      model: "mistralai/mistral-small",
-      messages: [{ role: "user", content: prompt }]
+      model: "openai/gpt-4o-mini", // ← MODELO ESTABLE
+      messages: [
+        { role: "user", content: prompt }
+      ]
     },
     {
       headers: {
         Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://localhost", // requerido por OpenRouter en algunos casos
+        "X-Title": "Web AI Bot"
       }
     }
   );
 
+  if (!response.data?.choices?.length) {
+    throw new Error("Respuesta inválida de OpenRouter");
+  }
+
   const content = response.data.choices[0].message.content;
+
   const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("JSON inválido");
+  if (!jsonMatch) {
+    throw new Error("La IA no devolvió JSON válido");
+  }
 
   return JSON.parse(jsonMatch[0]);
 }

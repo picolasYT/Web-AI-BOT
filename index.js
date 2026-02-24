@@ -276,6 +276,7 @@ REQUISITOS OBLIGATORIOS:
 - NO usar rutas que empiecen con "/"
 - NO usar frameworks (no Bootstrap, no Tailwind)
 - NO usar CDN externos
+- EL JS, CSS esten adentro del index.html con las etiquetas <style> y <script>
 
 Devuelve SOLO JSON válido con esta estructura exacta:
 

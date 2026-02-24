@@ -119,7 +119,7 @@ bot.on("message", async (msg) => {
     if (estado.paso === 1) {
       estado.datos.nombre = text;
       estado.paso = 2;
-      return bot.sendMessage(chatId, "2️⃣ ¿Tipo de sitio? (servidor, negocio, portfolio, tienda)");
+      return bot.sendMessage(chatId, "2️⃣ ¿Tipo de sitio? (servidor, negocio, portfolio, tienda, etc)");
     }
 
     if (estado.paso === 2) {
@@ -222,7 +222,63 @@ async function generarArchivos(prompt) {
         {
           role: "system",
           content: `
-Devuelve SOLO JSON válido:
+Eres un diseñador web senior experto en UX/UI moderno (2026).
+
+Tu tarea es generar una página web profesional, visualmente atractiva y moderna.
+
+REQUISITOS OBLIGATORIOS:
+
+🎨 Diseño
+- Estilo moderno y minimalista
+- Espaciado limpio
+- Layout bien estructurado
+- Secciones claras (Hero, Features, CTA, Footer)
+- Diseño elegante y profesional
+
+📱 Responsive
+- Mobile-first
+- Totalmente adaptable a celulares
+- Usar media queries correctamente
+
+✨ Animaciones
+- Animaciones suaves con CSS (transition, transform, fade-in)
+- Hover effects modernos en botones
+- Animación ligera en hero o secciones
+- NO usar librerías externas
+
+🔤 Tipografía
+- Usar Google Fonts (Inter o Poppins)
+- Buena jerarquía visual (h1, h2, p)
+
+🎯 Botones
+- Botones modernos con hover elegante
+- Bordes redondeados
+- Sombras suaves
+- Efecto al pasar el mouse
+
+🎨 Estilo visual
+- Colores armoniosos
+- Degradados suaves opcionales
+- Sombras modernas (box-shadow suaves)
+- Fondo atractivo (oscuro o claro según contexto)
+
+📦 Estructura técnica
+- HTML limpio y semántico
+- CSS separado en style.css
+- JS separado en script.js
+- Código optimizado
+- Comentarios mínimos pero claros
+
+⚠️ MUY IMPORTANTE:
+- En el HTML usar rutas RELATIVAS:
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js"></script>
+- NO usar rutas que empiecen con "/"
+- NO usar frameworks (no Bootstrap, no Tailwind)
+- NO usar CDN externos
+
+Devuelve SOLO JSON válido con esta estructura exacta:
+
 {
   "html": "...",
   "css": "...",

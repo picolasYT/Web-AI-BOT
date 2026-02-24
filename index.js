@@ -298,40 +298,47 @@ Devuelve SOLO JSON válido:
 }
 
 // ================= OPENROUTER =================
-
-// ================= OPENROUTER =================
-
 async function generarArchivos(prompt) {
-  const response = await axios.post(
-    "https://openrouter.ai/api/v1/chat/completions",
-    {
-      model: "openai/gpt-4o-mini", // ← MODELO ESTABLE
-      messages: [
-        { role: "user", content: prompt }
-      ]
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://localhost", // requerido por OpenRouter en algunos casos
-        "X-Title": "Web AI Bot"
+  try {
+    const response = await axios.post(
+      "https://openrouter.ai/api/v1/chat/completions",
+      {
+        model: "mistralai/mistral-small",
+        messages: [
+          { role: "user", content: prompt }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+          "Content-Type": "application/json"
+        }
       }
+    );
+
+    // Si la API devuelve error de usuario
+    if (response.data.error) {
+      console.error("🔴 OpenRouter error:", response.data.error);
+      throw new Error(response.data.error.message);
     }
-  );
 
-  if (!response.data?.choices?.length) {
-    throw new Error("Respuesta inválida de OpenRouter");
+    if (!response.data?.choices?.length) {
+      throw new Error("No se recibieron choices de OpenRouter");
+    }
+
+    const content = response.data.choices[0].message.content;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+
+    if (!jsonMatch) {
+      throw new Error("JSON no encontrado en la respuesta de la IA");
+    }
+
+    return JSON.parse(jsonMatch[0]);
+
+  } catch (error) {
+    console.error("🚨 ERROR OPENROUTER API:", error.response?.data || error.message);
+    throw error;
   }
-
-  const content = response.data.choices[0].message.content;
-
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error("La IA no devolvió JSON válido");
-  }
-
-  return JSON.parse(jsonMatch[0]);
 }
 
 // ================= ZIP =================

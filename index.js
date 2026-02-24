@@ -9,29 +9,31 @@ dotenv.config();
 
 const bot = new TelegramBot(process.env.TG_TOKEN, { polling: true });
 
-console.log("🚀 Web AI Bot PRO iniciado");
-console.log("KEY:", process.env.OPENROUTER_KEY);
+console.log("🤖 Web AI Bot iniciado...");
 
-// ================= DB =================
-
-const DB_FILE = "./data.json";
-if (!fs.existsSync(DB_FILE)) fs.writeJsonSync(DB_FILE, {});
-
-function loadDB() {
-  return fs.readJsonSync(DB_FILE);
-}
-
-function saveDB(data) {
-  fs.writeJsonSync(DB_FILE, data, { spaces: 2 });
-}
-
-// ================= ESTADOS =================
+// =======================
+// ESTADOS
+// =======================
 
 const usuariosActivos = new Set();
 const modoGuiado = {};
-const editorEstado = {};
+const DB_FILE = "./data.json";
 
-// ================= START MENU =================
+if (!fs.existsSync(DB_FILE)) {
+  fs.writeJsonSync(DB_FILE, {});
+}
+
+function cargarDB() {
+  return fs.readJsonSync(DB_FILE);
+}
+
+function guardarDB(data) {
+  fs.writeJsonSync(DB_FILE, data, { spaces: 2 });
+}
+
+// =======================
+// START MENU
+// =======================
 
 bot.onText(/\/start/, (msg) => {
   const chatId = msg.chat.id;
@@ -53,176 +55,121 @@ bot.onText(/\/start/, (msg) => {
     }
   };
 
-  bot.sendMessage(chatId, "👋 Bienvenido a Web AI Bot PRO\n\nElegí cómo querés crear tu web:", menu);
+  bot.sendMessage(chatId, "👋 Bienvenido a Web AI Bot\n\n¿Cómo querés crear tu web?", menu);
 });
 
-// ================= BOTONES =================
+// =======================
+// BOTONES
+// =======================
 
-bot.on("callback_query", async (query) => {
-  const chatId = query.message.chat.id;
-  const data = query.data;
-  const db = loadDB();
+bot.on("callback_query", async (callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const data = callbackQuery.data;
 
   if (data === "modo_manual") {
     usuariosActivos.add(chatId);
-    bot.sendMessage(chatId, "✍️ Modo Manual activado.\nDescribí tu web.");
+    bot.sendMessage(chatId, "✍️ Modo Manual activado.\nDescribí tu web libremente.");
   }
 
   if (data === "modo_guiado") {
     usuariosActivos.add(chatId);
     modoGuiado[chatId] = { paso: 1, datos: {} };
-    bot.sendMessage(chatId, "1️⃣ Nombre del sitio:");
+    bot.sendMessage(chatId, "🧠 Modo Guiado\n\n1️⃣ ¿Nombre del sitio?");
   }
 
   if (data === "mis_proyectos") {
-    const user = db[chatId];
-    if (!user || !user.proyectos?.length)
-      return bot.sendMessage(chatId, "📁 No tenés proyectos aún.");
+    const db = cargarDB();
+    const proyectos = db[chatId];
 
-    let texto = "📁 Tus proyectos:\n\n";
-    user.proyectos.forEach((p, i) => {
-      texto += `${i + 1}. ${p.nombre}\n${p.url || "Sin URL"}\n\n`;
-    });
-
-    bot.sendMessage(chatId, texto);
+    if (!proyectos || proyectos.length === 0) {
+      bot.sendMessage(chatId, "📁 No tenés proyectos guardados.");
+    } else {
+      let texto = "📁 Tus proyectos:\n\n";
+      proyectos.forEach((p, i) => {
+        texto += `${i + 1}. ${p.nombre}\n${p.url || "Sin URL"}\n\n`;
+      });
+      bot.sendMessage(chatId, texto);
+    }
   }
 
   if (data === "cancelar") {
     usuariosActivos.delete(chatId);
     delete modoGuiado[chatId];
-    delete editorEstado[chatId];
     bot.sendMessage(chatId, "❌ Conversación cancelada.");
   }
 
-  if (data === "editar_color") {
-    editorEstado[chatId] = { tipo: "color" };
-    bot.sendMessage(chatId, "🎨 Escribí el nuevo color principal:");
-  }
-
-  if (data === "editar_titulo") {
-    editorEstado[chatId] = { tipo: "titulo" };
-    bot.sendMessage(chatId, "✏️ Escribí el nuevo título:");
-  }
-
-  bot.answerCallbackQuery(query.id);
+  bot.answerCallbackQuery(callbackQuery.id);
 });
 
-// ================= MENSAJES =================
+// =======================
+// MENSAJES
+// =======================
 
 bot.on("message", async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
+
   if (!text || text.startsWith("/")) return;
-
-  const db = loadDB();
-
-  // FREE LIMIT (1 proyecto)
-  if (!db[chatId]) db[chatId] = { premium: false, proyectos: [] };
-  if (!db[chatId].premium && db[chatId].proyectos.length >= 1) {
-    return bot.sendMessage(chatId, "🚫 Límite gratis alcanzado (1 web).");
-  }
-
-  // EDITOR
-  if (editorEstado[chatId]) {
-    const tipo = editorEstado[chatId].tipo;
-    delete editorEstado[chatId];
-    return bot.sendMessage(chatId, `🔄 Cambio aplicado (${tipo}). Regenerá la web.`);
-  }
-
   if (!usuariosActivos.has(chatId)) return;
 
-  // GUIADO
+  // ================= GUIADO =================
   if (modoGuiado[chatId]) {
     const estado = modoGuiado[chatId];
 
     if (estado.paso === 1) {
       estado.datos.nombre = text;
       estado.paso = 2;
-      return bot.sendMessage(chatId, "2️⃣ Tipo de sitio:");
+      return bot.sendMessage(chatId, "2️⃣ ¿Tipo de sitio? (servidor, negocio, portfolio, tienda)");
     }
 
     if (estado.paso === 2) {
       estado.datos.tipo = text;
       estado.paso = 3;
-      return bot.sendMessage(chatId, "3️⃣ Color principal:");
+      return bot.sendMessage(chatId, "3️⃣ ¿Color principal?");
     }
 
     if (estado.paso === 3) {
       estado.datos.color = text;
-      delete modoGuiado[chatId];
 
       const prompt = `
-Crear web profesional.
+Crear una web:
 Nombre: ${estado.datos.nombre}
 Tipo: ${estado.datos.tipo}
-Color: ${estado.datos.color}
+Color principal: ${estado.datos.color}
 `;
 
+      delete modoGuiado[chatId];
       return generarYEnviar(chatId, prompt, estado.datos.nombre);
     }
   }
 
-  // MANUAL
-  generarYEnviar(chatId, text, "Proyecto Manual");
+  // ================= MANUAL =================
+  return generarYEnviar(chatId, text, "Proyecto Manual");
 });
 
-// ================= GENERAR =================
+// =======================
+// GENERAR Y ENVIAR
+// =======================
 
-async function generarYEnviar(chatId, prompt, nombre) {
-  bot.sendMessage(chatId, "⚙️ Generando diseño profesional...");
-
-  const promptFinal = `
-Eres diseñador web senior 2026 experto en UX/UI.
-
-Reglas obligatorias:
-- Diseño moderno minimalista
-- Responsive mobile-first
-- Google Fonts (Inter o Poppins)
-- Hero impactante
-- Botones con hover moderno
-- Animaciones suaves
-- Sombras suaves y degradados elegantes
-- Footer profesional
-- Código limpio y optimizado
-- No usar frameworks externos
-
-Detalles del usuario:
-${prompt}
-
-Devuelve SOLO JSON válido:
-{
-  "html": "...",
-  "css": "...",
-  "js": "..."
-}
-`;
-
-  let projectName;
-  let projectPath;
-  let zipPath;
+async function generarYEnviar(chatId, prompt, nombreProyecto) {
+  bot.sendMessage(chatId, "⚙️ Generando web...");
 
   try {
-    // ===== GENERAR ARCHIVOS IA =====
-    const files = await generarArchivos(promptFinal);
+    const files = await generarArchivos(prompt);
 
-    if (!files?.html || !files?.css || !files?.js) {
-      throw new Error("Archivos inválidos generados por IA");
-    }
-
-    projectName = `web-${Date.now()}`;
-    projectPath = `./${projectName}`;
+    const projectName = `web-${Date.now()}`;
+    const projectPath = `./${projectName}`;
 
     await fs.mkdir(projectPath);
     await fs.writeFile(`${projectPath}/index.html`, files.html);
     await fs.writeFile(`${projectPath}/style.css`, files.css);
     await fs.writeFile(`${projectPath}/script.js`, files.js);
 
-    // ===== DEPLOY VERCEL =====
     let deployedURL = null;
 
     await new Promise((resolve) => {
-      exec(`cd ${projectName} && vercel --prod --yes`, (err, stdout) => {
-        if (!err && stdout) {
+      exec(`cd ${projectName} && vercel --prod --yes`, (error, stdout) => {
+        if (!error) {
           const match = stdout.match(/https:\/\/[^\s]+/);
           if (match) deployedURL = match[0];
         }
@@ -230,123 +177,88 @@ Devuelve SOLO JSON válido:
       });
     });
 
-    // ===== CREAR ZIP =====
-    zipPath = `${projectName}.zip`;
+    const zipPath = `${projectName}.zip`;
     await crearZip(projectPath, zipPath);
 
-    // ===== GUARDAR EN DB =====
-    const db = loadDB();
-
-    // 🔥 FIX DEFINITIVO
-    if (!db[chatId]) {
-      db[chatId] = {
-        premium: false,
-        proyectos: []
-      };
-    }
-
-    if (!db[chatId].proyectos) {
-      db[chatId].proyectos = [];
-    }
-
-    db[chatId].proyectos.push({
-      nombre,
-      url: deployedURL || null,
-      fecha: new Date().toISOString()
-    });
-
-    saveDB(db);
-
-    // ===== RESPUESTA AL USUARIO =====
     if (deployedURL) {
-      await bot.sendMessage(chatId, `🚀 Web publicada:\n${deployedURL}`);
+      bot.sendMessage(chatId, `🚀 Web publicada:\n${deployedURL}`);
     } else {
-      await bot.sendMessage(chatId, "⚠️ No se pudo publicar en Vercel, pero te envío el ZIP.");
+      bot.sendMessage(chatId, "⚠️ No se pudo crear subdominio automático.");
     }
 
     await bot.sendDocument(chatId, zipPath);
 
-    // ===== BOTONES EDITOR =====
-    const opciones = {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "🎨 Cambiar color", callback_data: "editar_color" },
-            { text: "✏️ Cambiar título", callback_data: "editar_titulo" }
-          ],
-          [
-            { text: "❌ Cancelar", callback_data: "cancelar" }
-          ]
-        ]
-      }
-    };
+    // Guardar en DB
+    const db = cargarDB();
+    if (!db[chatId]) db[chatId] = [];
+    db[chatId].push({
+      nombre: nombreProyecto,
+      url: deployedURL,
+      fecha: new Date().toISOString()
+    });
+    guardarDB(db);
 
-    await bot.sendMessage(chatId, "¿Querés modificar algo?", opciones);
+    setTimeout(async () => {
+      await fs.remove(projectPath);
+      await fs.remove(zipPath);
+    }, 15000);
 
   } catch (err) {
-    console.error("🔥 ERROR REAL:", err.response?.data || err.message);
-    await bot.sendMessage(chatId, "❌ Error generando la web.");
-  }
-
-  // ===== LIMPIEZA SEGURA =====
-  try {
-    if (projectPath) await fs.remove(projectPath);
-    if (zipPath) await fs.remove(zipPath);
-  } catch (cleanupError) {
-    console.log("⚠️ Error limpiando archivos:", cleanupError.message);
+    console.error("ERROR:", err.response?.data || err.message);
+    bot.sendMessage(chatId, "❌ Error generando la web.");
   }
 }
 
-// ================= OPENROUTER =================
+// =======================
+// OPENROUTER
+// =======================
+
 async function generarArchivos(prompt) {
-  try {
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "mistralai/mistral-small",
-        messages: [
-          { role: "user", content: prompt }
-        ]
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
-          "Content-Type": "application/json"
-        }
+  const response = await axios.post(
+    "https://openrouter.ai/api/v1/chat/completions",
+    {
+      model: "openai/gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `
+Devuelve SOLO JSON válido:
+{
+  "html": "...",
+  "css": "...",
+  "js": "..."
+}
+`
+        },
+        { role: "user", content: prompt }
+      ]
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENROUTER_KEY}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://web-ai-bot.local",
+        "X-Title": "Web AI Bot"
       }
-    );
-
-    // Si la API devuelve error de usuario
-    if (response.data.error) {
-      console.error("🔴 OpenRouter error:", response.data.error);
-      throw new Error(response.data.error.message);
     }
+  );
 
-    if (!response.data?.choices?.length) {
-      throw new Error("No se recibieron choices de OpenRouter");
-    }
+  const content = response.data.choices[0].message.content;
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
 
-    const content = response.data.choices[0].message.content;
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error("JSON inválido");
 
-    if (!jsonMatch) {
-      throw new Error("JSON no encontrado en la respuesta de la IA");
-    }
-
-    return JSON.parse(jsonMatch[0]);
-
-  } catch (error) {
-    console.error("🚨 ERROR OPENROUTER API:", error.response?.data || error.message);
-    throw error;
-  }
+  return JSON.parse(jsonMatch[0]);
 }
 
-// ================= ZIP =================
+// =======================
+// ZIP
+// =======================
 
 function crearZip(source, out) {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(out);
-    const archive = archiver("zip");
+    const archive = archiver("zip", { zlib: { level: 9 } });
 
     output.on("close", resolve);
     archive.on("error", reject);

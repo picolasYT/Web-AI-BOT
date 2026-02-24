@@ -10,6 +10,7 @@ dotenv.config();
 const bot = new TelegramBot(process.env.TG_TOKEN, { polling: true });
 
 console.log("🚀 Web AI Bot PRO iniciado");
+console.log("KEY:", process.env.OPENROUTER_KEY);
 
 // ================= DB =================
 

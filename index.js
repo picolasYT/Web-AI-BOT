@@ -154,6 +154,9 @@ Color principal: ${estado.datos.color}
 async function generarYEnviar(chatId, prompt, nombreProyecto) {
   bot.sendMessage(chatId, "⚙️ Generando web...");
 
+  let projectPath = null;
+  let zipPath = null;
+
   try {
     const files = await generarArchivos(prompt);
 
@@ -161,54 +164,135 @@ async function generarYEnviar(chatId, prompt, nombreProyecto) {
       throw new Error("La IA no generó HTML válido");
     }
 
-    // 🔥 COMBINAR TODO EN UN SOLO HTML
+    // ==============================
+    // COMBINAR HTML + CSS + JS
+    // ==============================
+
     let htmlFinal = files.html;
 
-    // Insertar CSS dentro del <head>
+    // Si no existe <head>, lo creamos
+    if (!htmlFinal.includes("<head>")) {
+      htmlFinal = htmlFinal.replace(
+        "<html>",
+        `<html>\n<head>\n<meta charset="UTF-8">\n<title>${nombreProyecto}</title>\n</head>`
+      );
+    }
+
+    // Insertar CSS
     if (files.css) {
-      htmlFinal = htmlFinal.replace(
-        "</head>",
-        `<style>\n${files.css}\n</style>\n</head>`
-      );
-    }
-
-    // Insertar JS antes de </body>
-    if (files.js) {
-      htmlFinal = htmlFinal.replace(
-        "</body>",
-        `<script>\n${files.js}\n</script>\n</body>`
-      );
-    }
-
-    // 🔥 ENVIAR A RENDER
-    const response = await axios.post(
-      "https://TU_RENDER_URL.onrender.com/api/crear",
-      {
-        usuario: chatId.toString(),
-        html: htmlFinal
+      if (htmlFinal.includes("</head>")) {
+        htmlFinal = htmlFinal.replace(
+          "</head>",
+          `<style>\n${files.css}\n</style>\n</head>`
+        );
+      } else {
+        htmlFinal += `\n<style>\n${files.css}\n</style>\n`;
       }
+    }
+
+    // Insertar JS
+    if (files.js) {
+      if (htmlFinal.includes("</body>")) {
+        htmlFinal = htmlFinal.replace(
+          "</body>",
+          `<script>\n${files.js}\n</script>\n</body>`
+        );
+      } else {
+        htmlFinal += `\n<script>\n${files.js}\n</script>\n`;
+      }
+    }
+
+    let deployedURL = null;
+
+    // ==============================
+    // INTENTAR PUBLICAR EN RENDER
+    // ==============================
+
+    try {
+      const response = await axios.post(
+        "https://web-ai-bot-web.onrender.com/api/crear",
+        {
+          usuario: chatId.toString(),
+          html: htmlFinal
+        }
+      );
+
+      if (response.data?.url) {
+        deployedURL = response.data.url;
+      }
+
+    } catch (deployError) {
+      console.log("⚠️ Render falló. Activando fallback ZIP...");
+    }
+
+    // ==============================
+    // SI FUNCIONÓ RENDER
+    // ==============================
+
+    if (deployedURL) {
+      const db = cargarDB();
+      if (!db[chatId]) db[chatId] = [];
+
+      db[chatId].push({
+        nombre: nombreProyecto,
+        url: deployedURL,
+        fecha: new Date().toISOString()
+      });
+
+      guardarDB(db);
+
+      return bot.sendMessage(
+        chatId,
+        `🚀 Web creada exitosamente:\n${deployedURL}`
+      );
+    }
+
+    // ==============================
+    // FALLBACK → GENERAR ZIP
+    // ==============================
+
+    const projectName = `web-${Date.now()}`;
+    projectPath = `./${projectName}`;
+
+    await fs.mkdir(projectPath);
+    await fs.writeFile(`${projectPath}/index.html`, htmlFinal);
+
+    zipPath = `${projectName}.zip`;
+    await crearZip(projectPath, zipPath);
+
+    await bot.sendMessage(
+      chatId,
+      "⚠️ No se pudo publicar online. Te envío el ZIP."
     );
 
-    const deployedURL = response.data.url;
+    await bot.sendDocument(chatId, zipPath);
 
-    // Guardar en DB local del bot
+    // Guardar en DB sin URL
     const db = cargarDB();
     if (!db[chatId]) db[chatId] = [];
 
     db[chatId].push({
       nombre: nombreProyecto,
-      url: deployedURL,
+      url: null,
       fecha: new Date().toISOString()
     });
 
     guardarDB(db);
 
-    // Responder al usuario
-    bot.sendMessage(chatId, `🚀 Web creada exitosamente:\n${deployedURL}`);
-
   } catch (err) {
-    console.error("ERROR REAL:", err.response?.data || err.message);
+    console.error("🔥 ERROR REAL:", err.response?.data || err.message);
     bot.sendMessage(chatId, "❌ Error generando la web.");
+  }
+
+  // ==============================
+  // LIMPIEZA SEGURA
+  // ==============================
+
+  try {
+    if (projectPath) await fs.remove(projectPath);
+    if (zipPath) await fs.remove(zipPath);
+  } catch (cleanupError) {
+    console.log("⚠️ Error limpiando archivos:", cleanupError.message);
   }
 }
 
